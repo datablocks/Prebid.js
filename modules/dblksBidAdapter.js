@@ -59,6 +59,10 @@ function getDeviceContext() {
   // Time zone — geo inference fallback.
   ctx.tz = isFingerprintingApiDisabled('resolvedoptions') ? 'disabled' : (getTimeZone() || undefined);
 
+  // All browser language preferences — more complete than device.language.
+  const langs = navigator.languages;
+  if (langs?.length) ctx.langb = langs.join(',');
+
   // Cookie support — addressability signal.
   ctx.cookies = navigator.cookieEnabled ? 1 : 0;
 
@@ -110,6 +114,7 @@ const converter = ortbConverter({
       },
       device: {
         devicetype: device.devicetype,
+        ...(device.langb && { langb: device.langb }),
         // pxratio is a standard OpenRTB float — only set it when we have a real value.
         ...(typeof device.pxratio === 'number' && { pxratio: device.pxratio }),
         ...(device.connectiontype != null && { connectiontype: device.connectiontype }),

@@ -6,6 +6,7 @@ import { isSeleniumDetected } from '../libraries/webdriver/webdriver.js';
 import { getDevicePixelRatio } from '../libraries/devicePixelRatio/devicePixelRatio.js';
 import { getTimeZone } from '../libraries/timezone/timezone.js';
 import { isMobile, isConnectedTV } from '../libraries/advangUtils/index.js';
+import { isFingerprintingApiDisabled } from '../libraries/fingerprinting/fingerprinting.js';
 
 const BIDDER_CODE = 'dblks';
 const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
@@ -43,7 +44,7 @@ function getDeviceContext() {
   ctx.devicetype = isMobile() ? 1 : isConnectedTV() ? 3 : 2;
 
   // Pixel ratio — standard OpenRTB field; identifies retina/HiDPI screens.
-  ctx.pxratio = getDevicePixelRatio(window);
+  ctx.pxratio = isFingerprintingApiDisabled('devicepixelratio') ? 'disabled' : getDevicePixelRatio(window);
 
   // Network conditions.
   const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -56,14 +57,13 @@ function getDeviceContext() {
   if (navigator.maxTouchPoints != null) ctx.mtp = navigator.maxTouchPoints;
 
   // Time zone — geo inference fallback.
-  const tz = getTimeZone();
-  if (tz) ctx.tz = tz;
+  ctx.tz = isFingerprintingApiDisabled('resolvedoptions') ? 'disabled' : (getTimeZone() || undefined);
 
   // Cookie support — addressability signal.
   ctx.cookies = navigator.cookieEnabled ? 1 : 0;
 
   // Bot / automation detection.
-  ctx.is_bot = isSeleniumDetected() ? 1 : 0;
+  ctx.is_bot = isFingerprintingApiDisabled('webdriver') ? 'disabled' : (isSeleniumDetected() ? 1 : 0);
 
   // Device capability signals.
   if (navigator.hardwareConcurrency) ctx.cpu = navigator.hardwareConcurrency;
@@ -110,13 +110,17 @@ const converter = ortbConverter({
       },
       device: {
         devicetype: device.devicetype,
-        pxratio: device.pxratio,
+        // pxratio is a standard OpenRTB float — only set it when we have a real value.
+        ...(typeof device.pxratio === 'number' && { pxratio: device.pxratio }),
         ...(device.connectiontype != null && { connectiontype: device.connectiontype }),
         ext: {
           is_bot: device.is_bot,
           cookies: device.cookies,
+          // When pxratio is blocked, surface the marker in ext so the server can distinguish
+          // "disabled by publisher" from "device does not expose this value".
+          ...(typeof device.pxratio === 'string' && { pxratio: device.pxratio }),
           ...(device.mtp != null && { mtp: device.mtp }),
-          ...(device.tz && { tz: device.tz }),
+          ...(device.tz != null && { tz: device.tz }),
           ...(device.downlink != null && { downlink: device.downlink }),
           ...(device.cpu && { cpu: device.cpu }),
           ...(device.ram && { ram: device.ram }),

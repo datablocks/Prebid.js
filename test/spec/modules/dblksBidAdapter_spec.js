@@ -8,7 +8,7 @@ import 'modules/consentManagementTcf.js';
 import 'modules/consentManagementUsp.js';
 import { hook } from '../../../src/hook.js';
 
-const ENDPOINT = 'https://prebid.datablocks.net/openrtb2/auction';
+const ENDPOINT = 'https://prebid.dblks.net/openrtb2/auction';
 
 function makeBannerBid(overrides = {}) {
   return {
@@ -80,7 +80,7 @@ function makeBidderRequest(overrides = {}) {
   };
 }
 
-describe('Datablocks Bid Adapter', function () {
+describe('dblks Bid Adapter', function () {
   before(() => { hook.ready(); });
 
   const adapter = newBidder(spec);
@@ -154,11 +154,11 @@ describe('Datablocks Bid Adapter', function () {
       expect(reqs[0].data.at).to.equal(1);
     });
 
-    it('sets tagid and datablocks ext on each imp', function () {
+    it('sets tagid and dblks ext on each imp', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
       const imp  = reqs[0].data.imp[0];
       expect(imp.tagid).to.equal('db-site-001');
-      expect(imp.ext.datablocks.siteId).to.equal('db-site-001');
+      expect(imp.ext.dblks.siteId).to.equal('db-site-001');
     });
 
     it('applies bidFloor param when floors module has not set one', function () {
@@ -279,7 +279,7 @@ describe('Datablocks Bid Adapter', function () {
   });
 
   describe('getUserSyncs', function () {
-    const SYNC_URL = 'https://sync.datablocks.net/usersync';
+    const SYNC_URL = 'https://sync.dblks.net/usersync';
 
     it('returns empty array when no sync types enabled', function () {
       expect(spec.getUserSyncs({}, [], null, null, null)).to.deep.equal([]);

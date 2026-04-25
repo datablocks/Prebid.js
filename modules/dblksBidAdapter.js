@@ -4,7 +4,7 @@ import { ortbConverter } from '../libraries/ortbConverter/converter.js';
 import { deepAccess, mergeDeep } from '../src/utils.js';
 
 const BIDDER_CODE = 'dblks';
-const ENDPOINT_URL = 'https://prebid.datablocks.net/openrtb2/auction';
+const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
 const TTL = 300;
 
 const converter = ortbConverter({
@@ -22,9 +22,9 @@ const converter = ortbConverter({
   imp(buildImp, bidRequest, context) {
     const imp = buildImp(bidRequest, context);
 
-    // Tag the imp with the publisher's site ID so Datablocks can route it.
+    // Tag the imp with the publisher's site ID so dblks can route it.
     imp.tagid = bidRequest.params.siteId;
-    mergeDeep(imp, { ext: { datablocks: { siteId: bidRequest.params.siteId } } });
+    mergeDeep(imp, { ext: { dblks: { siteId: bidRequest.params.siteId } } });
 
     // Apply optional per-unit floor when not already set by the floors module.
     if (bidRequest.params.bidFloor && !imp.bidfloor) {
@@ -106,7 +106,7 @@ export const spec = {
     }
 
     const qs = params.length ? `?${params.join('&')}` : '';
-    return [{ type, url: `https://sync.datablocks.net/usersync${qs}` }];
+    return [{ type, url: `https://sync.dblks.net/usersync${qs}` }];
   }
 };
 

@@ -1,4 +1,4 @@
-# Datablocks Bid Adapter
+# dblks Bid Adapter
 
 ## Overview
 
@@ -12,7 +12,7 @@
 
 | Param      | Required | Type   | Description                          |
 |------------|----------|--------|--------------------------------------|
-| `siteId`   | Yes      | String | Datablocks site/placement identifier |
+| `siteId`   | Yes      | String | dblks site/placement identifier |
 | `bidFloor` | No       | Number | Minimum bid price (USD CPM)          |
 
 ## Ad Unit Examples

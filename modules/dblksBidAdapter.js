@@ -7,6 +7,43 @@ const BIDDER_CODE = 'dblks';
 const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
 const TTL = 300;
 
+// Maps Network Information API effectiveType to OpenRTB connectiontype integers.
+const CONNECTION_TYPE = { 'slow-2g': 4, '2g': 4, '3g': 5, '4g': 6 };
+
+function getPageContext() {
+  const ctx = {};
+
+  // Page visibility — is the tab active?
+  try { ctx.vis = window.top.document.visibilityState; } catch (_) { ctx.vis = document.visibilityState; }
+
+  // Scroll depth — pixels from top of page (proxy for ad position relative to fold).
+  try { ctx.scroll = window.top.pageYOffset; } catch (_) { ctx.scroll = window.pageYOffset; }
+
+  // Page load time in ms — only available after the load event has fired.
+  const timing = window.performance?.timing;
+  if (timing?.loadEventEnd > 0) {
+    ctx.plt = timing.loadEventEnd - timing.navigationStart;
+  }
+
+  return ctx;
+}
+
+function getDeviceContext() {
+  const ctx = {};
+
+  // Network conditions.
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn) {
+    ctx.connectiontype = CONNECTION_TYPE[conn.effectiveType] ?? 0;
+    if (conn.downlink != null) ctx.downlink = conn.downlink;
+  }
+
+  // Bot / automation detection.
+  ctx.is_bot = navigator.webdriver === true ? 1 : 0;
+
+  return ctx;
+}
+
 const converter = ortbConverter({
   context: {
     netRevenue: true,
@@ -31,9 +68,15 @@ const converter = ortbConverter({
 
   request(buildRequest, imps, bidderRequest, context) {
     const req = buildRequest(imps, bidderRequest, context);
-    let vis;
-    try { vis = window.top.document.visibilityState; } catch (_) { vis = document.visibilityState; }
-    mergeDeep(req, { at: 1, site: { ext: { vis } } });
+    const page = getPageContext();
+    const device = getDeviceContext();
+
+    mergeDeep(req, {
+      at: 1,
+      site: { ext: { vis: page.vis, scroll: page.scroll, ...(page.plt != null && { plt: page.plt }) } },
+      device: { connectiontype: device.connectiontype, ext: { is_bot: device.is_bot, ...(device.downlink != null && { downlink: device.downlink }) } },
+    });
+
     return req;
   },
 

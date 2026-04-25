@@ -205,6 +205,21 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.site.ext.vis).to.equal(document.visibilityState);
     });
 
+    it('sets site.ext.scroll to the page scroll offset', function () {
+      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
+      expect(reqs[0].data.site.ext.scroll).to.be.a('number');
+    });
+
+    it('sets device.ext.is_bot', function () {
+      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
+      expect(reqs[0].data.device.ext.is_bot).to.be.oneOf([0, 1]);
+    });
+
+    it('sets device.connectiontype', function () {
+      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
+      expect(reqs[0].data.device.connectiontype).to.be.a('number');
+    });
+
     it('passes GDPR consent into the request', function () {
       const req = makeBidderRequest({
         gdprConsent: { gdprApplies: true, consentString: 'test-consent' }

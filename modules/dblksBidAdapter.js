@@ -1,7 +1,8 @@
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { BANNER, VIDEO, NATIVE } from '../src/mediaTypes.js';
 import { ortbConverter } from '../libraries/ortbConverter/converter.js';
-import { deepAccess, mergeDeep } from '../src/utils.js';
+import { deepAccess, generateUUID, mergeDeep } from '../src/utils.js';
+import { getStorageManager } from '../src/storageManager.js';
 import { isSeleniumDetected } from '../libraries/webdriver/webdriver.js';
 import { getDevicePixelRatio } from '../libraries/devicePixelRatio/devicePixelRatio.js';
 import { getTimeZone } from '../libraries/timezone/timezone.js';
@@ -11,9 +12,48 @@ import { isFingerprintingApiDisabled } from '../libraries/fingerprinting/fingerp
 const BIDDER_CODE = 'dblks';
 const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
 const TTL = 300;
+const STORAGE_KEY = '_dblks_s';
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Maps Network Information API effectiveType to OpenRTB connectiontype integers.
 const CONNECTION_TYPE = { 'slow-2g': 4, '2g': 4, '3g': 5, '4g': 6 };
+
+const storage = getStorageManager({ bidderCode: BIDDER_CODE });
+
+// ─── Session tracking ─────────────────────────────────────────────────────────
+
+function getSessionData() {
+  if (!storage.localStorageIsEnabled()) return {};
+
+  const now = Date.now();
+  let rec = {};
+  try { rec = JSON.parse(storage.getDataFromLocalStorage(STORAGE_KEY)) || {}; } catch (_) {}
+
+  const elapsed = now - (rec.pst || 0);
+  const newSession = !rec.sid || elapsed > SESSION_TIMEOUT_MS;
+
+  const updated = {
+    uid: rec.uid || generateUUID(),
+    sid: newSession ? generateUUID() : rec.sid,
+    sst: newSession ? now : rec.sst,
+    pst: now,
+    purl: window.location.href,
+    pct: newSession ? 1 : (rec.pct || 0) + 1,
+  };
+
+  try { storage.setDataInLocalStorage(STORAGE_KEY, JSON.stringify(updated)); } catch (_) {}
+
+  return {
+    uid: updated.uid,
+    sid: updated.sid,
+    pct: updated.pct,
+    sage: now - updated.sst,
+    tbp: newSession ? null : elapsed,
+    purl: rec.purl || null,
+  };
+}
+
+// ─── Page context ─────────────────────────────────────────────────────────────
 
 function getPageContext() {
   const ctx = {};
@@ -36,6 +76,8 @@ function getPageContext() {
 
   return ctx;
 }
+
+// ─── Device context ───────────────────────────────────────────────────────────
 
 function getDeviceContext() {
   const ctx = {};
@@ -76,6 +118,8 @@ function getDeviceContext() {
   return ctx;
 }
 
+// ─── ortbConverter ────────────────────────────────────────────────────────────
+
 const converter = ortbConverter({
   context: {
     netRevenue: true,
@@ -102,6 +146,7 @@ const converter = ortbConverter({
     const req = buildRequest(imps, bidderRequest, context);
     const page = getPageContext();
     const device = getDeviceContext();
+    const session = getSessionData();
 
     mergeDeep(req, {
       at: 1,
@@ -110,19 +155,24 @@ const converter = ortbConverter({
           vis: page.vis,
           scroll: page.scroll,
           ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }),
+          ...(session.sid && {
+            uid: session.uid,
+            sid: session.sid,
+            pct: session.pct,
+            sage: session.sage,
+            ...(session.tbp != null && { tbp: session.tbp }),
+            ...(session.purl && { purl: session.purl }),
+          }),
         }
       },
       device: {
         devicetype: device.devicetype,
         ...(device.langb && { langb: device.langb }),
-        // pxratio is a standard OpenRTB float — only set it when we have a real value.
         ...(typeof device.pxratio === 'number' && { pxratio: device.pxratio }),
         ...(device.connectiontype != null && { connectiontype: device.connectiontype }),
         ext: {
           is_bot: device.is_bot,
           cookies: device.cookies,
-          // When pxratio is blocked, surface the marker in ext so the server can distinguish
-          // "disabled by publisher" from "device does not expose this value".
           ...(typeof device.pxratio === 'string' && { pxratio: device.pxratio }),
           ...(device.mtp != null && { mtp: device.mtp }),
           ...(device.tz != null && { tz: device.tz }),
@@ -148,6 +198,8 @@ const converter = ortbConverter({
     return bidResponse;
   }
 });
+
+// ─── Spec ─────────────────────────────────────────────────────────────────────
 
 export const spec = {
   code: BIDDER_CODE,

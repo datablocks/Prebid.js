@@ -19,6 +19,12 @@ const converter = ortbConverter({
     }
   },
 
+  imp(buildImp, bidRequest, context) {
+    const imp = buildImp(bidRequest, context);
+    imp.tagid = bidRequest.adUnitCode;
+    return imp;
+  },
+
   request(buildRequest, imps, bidderRequest, context) {
     const req = buildRequest(imps, bidderRequest, context);
     mergeDeep(req, { at: 1 });  // first-price auction

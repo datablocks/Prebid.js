@@ -156,6 +156,11 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.at).to.equal(1);
     });
 
+    it('sets tagid to the ad unit code', function () {
+      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
+      expect(reqs[0].data.imp[0].tagid).to.equal('banner-div');
+    });
+
     it('includes a banner imp', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
       expect(reqs[0].data.imp[0].banner).to.exist;

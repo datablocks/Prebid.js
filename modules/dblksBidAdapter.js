@@ -21,7 +21,11 @@ const converter = ortbConverter({
 
   imp(buildImp, bidRequest, context) {
     const imp = buildImp(bidRequest, context);
-    imp.tagid = deepAccess(bidRequest, 'ortb2Imp.ext.gpid') || bidRequest.adUnitCode;
+    imp.tagid = imp.ext?.gpid || bidRequest.adUnitCode;
+    if (!imp.ext?.gpid) {
+      imp.ext = imp.ext || {};
+      imp.ext.gpid = bidRequest.adUnitCode;
+    }
     return imp;
   },
 

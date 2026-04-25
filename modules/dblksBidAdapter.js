@@ -3,6 +3,9 @@ import { BANNER, VIDEO, NATIVE } from '../src/mediaTypes.js';
 import { ortbConverter } from '../libraries/ortbConverter/converter.js';
 import { deepAccess, mergeDeep } from '../src/utils.js';
 import { isSeleniumDetected } from '../libraries/webdriver/webdriver.js';
+import { getDevicePixelRatio } from '../libraries/devicePixelRatio/devicePixelRatio.js';
+import { getTimeZone } from '../libraries/timezone/timezone.js';
+import { isMobile, isConnectedTV } from '../libraries/advangUtils/index.js';
 
 const BIDDER_CODE = 'dblks';
 const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
@@ -24,11 +27,11 @@ function getPageContext() {
   try {
     const t = window.performance?.timing;
     if (t?.loadEventEnd > 0) {
-      ctx.plt = t.loadEventEnd - t.navigationStart;  // total page load time
-      ctx.ct = t.responseEnd - t.requestStart;     // server connect/response time
-      ctx.rt = t.domComplete - t.domLoading;       // DOM render time
+      ctx.plt = t.loadEventEnd - t.navigationStart; // total page load time
+      ctx.ct = t.responseEnd - t.requestStart;      // server connect/response time
+      ctx.rt = t.domComplete - t.domLoading;        // DOM render time
     }
-  } catch (_) {};
+  } catch (_) {}
 
   return ctx;
 }
@@ -36,12 +39,28 @@ function getPageContext() {
 function getDeviceContext() {
   const ctx = {};
 
+  // Device type — standard OpenRTB field (1=mobile/tablet, 2=PC, 3=CTV).
+  ctx.devicetype = isMobile() ? 1 : isConnectedTV() ? 3 : 2;
+
+  // Pixel ratio — standard OpenRTB field; identifies retina/HiDPI screens.
+  ctx.pxratio = getDevicePixelRatio(window);
+
   // Network conditions.
   const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   if (conn) {
     ctx.connectiontype = CONNECTION_TYPE[conn.effectiveType] ?? 0;
     if (conn.downlink != null) ctx.downlink = conn.downlink;
   }
+
+  // Touch points — more reliable than UA for detecting touchscreen devices.
+  if (navigator.maxTouchPoints != null) ctx.mtp = navigator.maxTouchPoints;
+
+  // Time zone — geo inference fallback.
+  const tz = getTimeZone();
+  if (tz) ctx.tz = tz;
+
+  // Cookie support — addressability signal.
+  ctx.cookies = navigator.cookieEnabled ? 1 : 0;
 
   // Bot / automation detection.
   ctx.is_bot = isSeleniumDetected() ? 1 : 0;
@@ -59,8 +78,8 @@ const converter = ortbConverter({
     ttl: TTL,
     nativeRequest: {
       eventtrackers: [
-        { event: 1, methods: [1, 2] },  // impression — image + js
-        { event: 2, methods: [1] },     // viewable MRC50 — image
+        { event: 1, methods: [1, 2] }, // impression — image + js
+        { event: 2, methods: [1] },    // viewable MRC50 — image
       ]
     }
   },
@@ -82,8 +101,27 @@ const converter = ortbConverter({
 
     mergeDeep(req, {
       at: 1,
-      site: { ext: { vis: page.vis, scroll: page.scroll, ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }) } },
-      device: { connectiontype: device.connectiontype, ext: { is_bot: device.is_bot, ...(device.downlink != null && { downlink: device.downlink }), ...(device.cpu && { cpu: device.cpu }), ...(device.ram && { ram: device.ram }) } },
+      site: {
+        ext: {
+          vis: page.vis,
+          scroll: page.scroll,
+          ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }),
+        }
+      },
+      device: {
+        devicetype: device.devicetype,
+        pxratio: device.pxratio,
+        ...(device.connectiontype != null && { connectiontype: device.connectiontype }),
+        ext: {
+          is_bot: device.is_bot,
+          cookies: device.cookies,
+          ...(device.mtp != null && { mtp: device.mtp }),
+          ...(device.tz && { tz: device.tz }),
+          ...(device.downlink != null && { downlink: device.downlink }),
+          ...(device.cpu && { cpu: device.cpu }),
+          ...(device.ram && { ram: device.ram }),
+        },
+      },
     });
 
     return req;

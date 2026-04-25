@@ -20,11 +20,15 @@ function getPageContext() {
   // Scroll depth — pixels from top of page (proxy for ad position relative to fold).
   try { ctx.scroll = window.top.pageYOffset; } catch (_) { ctx.scroll = window.pageYOffset; }
 
-  // Page load time in ms — only available after the load event has fired.
-  const timing = window.performance?.timing;
-  if (timing?.loadEventEnd > 0) {
-    ctx.plt = timing.loadEventEnd - timing.navigationStart;
-  }
+  // Page performance — only available after the load event has fired.
+  try {
+    const t = window.performance?.timing;
+    if (t?.loadEventEnd > 0) {
+      ctx.plt = t.loadEventEnd - t.navigationStart;  // total page load time
+      ctx.ct = t.responseEnd - t.requestStart;     // server connect/response time
+      ctx.rt = t.domComplete - t.domLoading;       // DOM render time
+    }
+  } catch (_) {};
 
   return ctx;
 }
@@ -74,7 +78,7 @@ const converter = ortbConverter({
 
     mergeDeep(req, {
       at: 1,
-      site: { ext: { vis: page.vis, scroll: page.scroll, ...(page.plt != null && { plt: page.plt }) } },
+      site: { ext: { vis: page.vis, scroll: page.scroll, ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }) } },
       device: { connectiontype: device.connectiontype, ext: { is_bot: device.is_bot, ...(device.downlink != null && { downlink: device.downlink }) } },
     });
 

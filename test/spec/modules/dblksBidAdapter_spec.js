@@ -156,7 +156,13 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.at).to.equal(1);
     });
 
-    it('sets tagid to the ad unit code', function () {
+    it('sets tagid to gpid when present', function () {
+      const bid = makeBannerBid({ ortb2Imp: { ext: { gpid: '/1234/homepage#banner-div' } } });
+      const reqs = spec.buildRequests([bid], bidderRequest);
+      expect(reqs[0].data.imp[0].tagid).to.equal('/1234/homepage#banner-div');
+    });
+
+    it('falls back tagid to adUnitCode when gpid is absent', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
       expect(reqs[0].data.imp[0].tagid).to.equal('banner-div');
     });

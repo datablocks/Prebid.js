@@ -168,7 +168,13 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.imp[0].ext.gpid).to.equal('/1234/homepage#banner-div');
     });
 
-    it('falls back ext.gpid to adUnitCode when gpid is absent', function () {
+    it('falls back ext.gpid to pbadslot when gpid is absent', function () {
+      const bid = makeBannerBid({ ortb2Imp: { ext: { data: { pbadslot: '/1234/homepage' } } } });
+      const reqs = spec.buildRequests([bid], bidderRequest);
+      expect(reqs[0].data.imp[0].ext.gpid).to.equal('/1234/homepage');
+    });
+
+    it('falls back ext.gpid to adUnitCode when both gpid and pbadslot are absent', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
       expect(reqs[0].data.imp[0].ext.gpid).to.equal('banner-div');
     });

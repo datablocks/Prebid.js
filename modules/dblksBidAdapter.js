@@ -24,7 +24,7 @@ const converter = ortbConverter({
     imp.tagid = bidRequest.adUnitCode;
     if (!imp.ext?.gpid) {
       imp.ext = imp.ext || {};
-      imp.ext.gpid = bidRequest.adUnitCode;
+      imp.ext.gpid = deepAccess(bidRequest, 'ortb2Imp.ext.data.pbadslot') || bidRequest.adUnitCode;
     }
     return imp;
   },

@@ -2,18 +2,13 @@
 
 ## Overview
 
-| Field          | Value        |
-|----------------|--------------|
-| Bidder Code    | `dblks`      |
+| Field          | Value                 |
+|----------------|-----------------------|
+| Bidder Code    | `dblks`               |
 | Media Types    | Banner, Video, Native |
-| OpenRTB        | 2.6          |
+| OpenRTB        | 2.6                   |
 
-## Parameters
-
-| Param      | Required | Type   | Description                          |
-|------------|----------|--------|--------------------------------------|
-| `siteId`   | Yes      | String | dblks site/placement identifier |
-| `bidFloor` | No       | Number | Minimum bid price (USD CPM)          |
+No publisher configuration parameters are required.
 
 ## Ad Unit Examples
 
@@ -27,13 +22,7 @@ var adUnits = [{
       sizes: [[300, 250], [728, 90], [160, 600]]
     }
   },
-  bids: [{
-    bidder: 'dblks',
-    params: {
-      siteId: 'db-acme-001',
-      bidFloor: 0.30
-    }
-  }]
+  bids: [{ bidder: 'dblks' }]
 }];
 ```
 
@@ -54,12 +43,7 @@ var adUnits = [{
       linearity:      1
     }
   },
-  bids: [{
-    bidder: 'dblks',
-    params: {
-      siteId: 'db-acme-001v'
-    }
-  }]
+  bids: [{ bidder: 'dblks' }]
 }];
 ```
 
@@ -76,12 +60,7 @@ var adUnits = [{
       sponsoredBy: { required: true }
     }
   },
-  bids: [{
-    bidder: 'dblks',
-    params: {
-      siteId: 'db-acme-001n'
-    }
-  }]
+  bids: [{ bidder: 'dblks' }]
 }];
 ```
 
@@ -103,9 +82,6 @@ var adUnits = [{
       image: { required: true }
     }
   },
-  bids: [{
-    bidder: 'dblks',
-    params: { siteId: 'db-acme-001' }
-  }]
+  bids: [{ bidder: 'dblks' }]
 }];
 ```

@@ -12,15 +12,15 @@ const ENDPOINT = 'https://prebid.dblks.net/openrtb2/auction';
 
 function makeBannerBid(overrides = {}) {
   return {
-    bidder:           'dblks',
-    bidId:            'bid-banner-1',
-    adUnitCode:       'banner-div',
-    auctionId:        'auction-1',
-    transactionId:    'txn-1',
+    bidder:        'dblks',
+    bidId:         'bid-banner-1',
+    adUnitCode:    'banner-div',
+    auctionId:     'auction-1',
+    transactionId: 'txn-1',
     mediaTypes: {
       banner: { sizes: [[300, 250], [728, 90]] }
     },
-    params: { siteId: 'db-site-001' },
+    params: {},
     ...overrides
   };
 }
@@ -43,7 +43,7 @@ function makeVideoBid(overrides = {}) {
         linearity:   1
       }
     },
-    params: { siteId: 'db-site-001v' },
+    params: {},
     ...overrides
   };
 }
@@ -61,7 +61,7 @@ function makeNativeBid(overrides = {}) {
         image: { required: true }
       }
     },
-    params: { siteId: 'db-site-001n' },
+    params: {},
     ...overrides
   };
 }
@@ -104,8 +104,10 @@ describe('dblks Bid Adapter', function () {
       expect(spec.isBidRequestValid(makeNativeBid())).to.be.true;
     });
 
-    it('returns false when siteId is missing', function () {
-      expect(spec.isBidRequestValid(makeBannerBid({ params: {} }))).to.be.false;
+    it('returns true with no params object', function () {
+      const bid = makeBannerBid();
+      delete bid.params;
+      expect(spec.isBidRequestValid(bid)).to.be.true;
     });
 
     it('returns false for banner with no sizes', function () {
@@ -131,10 +133,10 @@ describe('dblks Bid Adapter', function () {
     let bannerRequest, videoRequest, nativeRequest, bidderRequest;
 
     beforeEach(function () {
-      bannerRequest  = makeBannerBid();
-      videoRequest   = makeVideoBid();
-      nativeRequest  = makeNativeBid();
-      bidderRequest  = makeBidderRequest();
+      bannerRequest = makeBannerBid();
+      videoRequest  = makeVideoBid();
+      nativeRequest = makeNativeBid();
+      bidderRequest = makeBidderRequest();
     });
 
     it('returns a single POST request to the endpoint', function () {
@@ -152,19 +154,6 @@ describe('dblks Bid Adapter', function () {
     it('sets auction type to first-price (at=1)', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
       expect(reqs[0].data.at).to.equal(1);
-    });
-
-    it('sets tagid and dblks ext on each imp', function () {
-      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      const imp  = reqs[0].data.imp[0];
-      expect(imp.tagid).to.equal('db-site-001');
-      expect(imp.ext.dblks.siteId).to.equal('db-site-001');
-    });
-
-    it('applies bidFloor param when floors module has not set one', function () {
-      const bid = makeBannerBid({ params: { siteId: 'db-site-001', bidFloor: 0.5 } });
-      const reqs = spec.buildRequests([bid], bidderRequest);
-      expect(reqs[0].data.imp[0].bidfloor).to.equal(0.5);
     });
 
     it('includes a banner imp', function () {
@@ -193,20 +182,17 @@ describe('dblks Bid Adapter', function () {
         gdprConsent: { gdprApplies: true, consentString: 'test-consent' }
       });
       const reqs = spec.buildRequests([bannerRequest], req);
-      const ortb  = reqs[0].data;
+      const ortb = reqs[0].data;
       expect(ortb.regs?.ext?.gdpr ?? ortb.regs?.gdpr).to.equal(1);
     });
   });
 
   describe('interpretResponse', function () {
-    function makeServerResponse(bid, reqData) {
+    function makeServerResponse(bid) {
       return {
         body: {
           id:      'resp-1',
-          seatbid: [{
-            seat: 'dblks',
-            bid:  [bid]
-          }]
+          seatbid: [{ seat: 'dblks', bid: [bid] }]
         }
       };
     }
@@ -219,19 +205,17 @@ describe('dblks Bid Adapter', function () {
     it('returns a banner bid response', function () {
       const reqs = spec.buildRequests([makeBannerBid()], makeBidderRequest());
       const impId = reqs[0].data.imp[0].id;
-      const serverResp = makeServerResponse({
+      const bids = spec.interpretResponse(makeServerResponse({
         id:      'bid-1',
         impid:   impId,
         price:   1.50,
-        adid:    'creative-1',
         crid:    'creative-1',
         adm:     '<div>ad</div>',
         adomain: ['advertiser.com'],
         w:       300,
         h:       250,
         mtype:   1
-      });
-      const bids = spec.interpretResponse(serverResp, reqs[0]);
+      }), reqs[0]);
       expect(bids).to.have.length(1);
       expect(bids[0].cpm).to.equal(1.50);
       expect(bids[0].width).to.equal(300);
@@ -240,10 +224,10 @@ describe('dblks Bid Adapter', function () {
       expect(bids[0].meta.advertiserDomains).to.deep.equal(['advertiser.com']);
     });
 
-    it('returns a video bid response with vastXml', function () {
+    it('returns a video bid response', function () {
       const reqs = spec.buildRequests([makeVideoBid()], makeBidderRequest());
       const impId = reqs[0].data.imp[0].id;
-      const serverResp = makeServerResponse({
+      const bids = spec.interpretResponse(makeServerResponse({
         id:    'bid-v1',
         impid: impId,
         price: 3.00,
@@ -252,8 +236,7 @@ describe('dblks Bid Adapter', function () {
         w:     640,
         h:     480,
         mtype: 2
-      });
-      const bids = spec.interpretResponse(serverResp, reqs[0]);
+      }), reqs[0]);
       expect(bids).to.have.length(1);
       expect(bids[0].cpm).to.equal(3.00);
       expect(bids[0].mediaType).to.equal(VIDEO);
@@ -262,7 +245,7 @@ describe('dblks Bid Adapter', function () {
     it('populates meta.advertiserDomains from adomain', function () {
       const reqs = spec.buildRequests([makeBannerBid()], makeBidderRequest());
       const impId = reqs[0].data.imp[0].id;
-      const serverResp = makeServerResponse({
+      const bids = spec.interpretResponse(makeServerResponse({
         id:      'bid-2',
         impid:   impId,
         price:   2.00,
@@ -272,8 +255,7 @@ describe('dblks Bid Adapter', function () {
         w:       728,
         h:       90,
         mtype:   1
-      });
-      const bids = spec.interpretResponse(serverResp, reqs[0]);
+      }), reqs[0]);
       expect(bids[0].meta.advertiserDomains).to.deep.equal(['brand.com', 'agency.com']);
     });
   });

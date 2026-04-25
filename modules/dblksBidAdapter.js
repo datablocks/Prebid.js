@@ -19,21 +19,6 @@ const converter = ortbConverter({
     }
   },
 
-  imp(buildImp, bidRequest, context) {
-    const imp = buildImp(bidRequest, context);
-
-    // Tag the imp with the publisher's site ID so dblks can route it.
-    imp.tagid = bidRequest.params.siteId;
-    mergeDeep(imp, { ext: { dblks: { siteId: bidRequest.params.siteId } } });
-
-    // Apply optional per-unit floor when not already set by the floors module.
-    if (bidRequest.params.bidFloor && !imp.bidfloor) {
-      imp.bidfloor = bidRequest.params.bidFloor;
-    }
-
-    return imp;
-  },
-
   request(buildRequest, imps, bidderRequest, context) {
     const req = buildRequest(imps, bidderRequest, context);
     mergeDeep(req, { at: 1 });  // first-price auction
@@ -58,8 +43,6 @@ export const spec = {
   supportedMediaTypes: [BANNER, VIDEO, NATIVE],
 
   isBidRequestValid(bid) {
-    if (!bid.params?.siteId) return false;
-
     // Banner needs at least one size.
     if (deepAccess(bid, 'mediaTypes.banner') &&
         !deepAccess(bid, 'mediaTypes.banner.sizes.length')) return false;

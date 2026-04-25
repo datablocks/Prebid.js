@@ -46,6 +46,10 @@ function getDeviceContext() {
   // Bot / automation detection.
   ctx.is_bot = isSeleniumDetected() ? 1 : 0;
 
+  // Device capability signals.
+  if (navigator.hardwareConcurrency) ctx.cpu = navigator.hardwareConcurrency;
+  if (navigator.deviceMemory) ctx.ram = navigator.deviceMemory;
+
   return ctx;
 }
 
@@ -79,7 +83,7 @@ const converter = ortbConverter({
     mergeDeep(req, {
       at: 1,
       site: { ext: { vis: page.vis, scroll: page.scroll, ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }) } },
-      device: { connectiontype: device.connectiontype, ext: { is_bot: device.is_bot, ...(device.downlink != null && { downlink: device.downlink }) } },
+      device: { connectiontype: device.connectiontype, ext: { is_bot: device.is_bot, ...(device.downlink != null && { downlink: device.downlink }), ...(device.cpu && { cpu: device.cpu }), ...(device.ram && { ram: device.ram }) } },
     });
 
     return req;

@@ -156,19 +156,21 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.at).to.equal(1);
     });
 
-    it('uses ortb2Imp gpid for tagid and ext.gpid when set', function () {
+    it('always sets tagid to adUnitCode', function () {
       const bid = makeBannerBid({ ortb2Imp: { ext: { gpid: '/1234/homepage#banner-div' } } });
       const reqs = spec.buildRequests([bid], bidderRequest);
-      const imp = reqs[0].data.imp[0];
-      expect(imp.tagid).to.equal('/1234/homepage#banner-div');
-      expect(imp.ext.gpid).to.equal('/1234/homepage#banner-div');
+      expect(reqs[0].data.imp[0].tagid).to.equal('banner-div');
     });
 
-    it('falls back tagid and ext.gpid to adUnitCode when gpid is absent', function () {
+    it('sets ext.gpid from ortb2Imp when present', function () {
+      const bid = makeBannerBid({ ortb2Imp: { ext: { gpid: '/1234/homepage#banner-div' } } });
+      const reqs = spec.buildRequests([bid], bidderRequest);
+      expect(reqs[0].data.imp[0].ext.gpid).to.equal('/1234/homepage#banner-div');
+    });
+
+    it('falls back ext.gpid to adUnitCode when gpid is absent', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      const imp = reqs[0].data.imp[0];
-      expect(imp.tagid).to.equal('banner-div');
-      expect(imp.ext.gpid).to.equal('banner-div');
+      expect(reqs[0].data.imp[0].ext.gpid).to.equal('banner-div');
     });
 
     it('includes a banner imp', function () {

@@ -200,6 +200,11 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.imp).to.have.length(3);
     });
 
+    it('sets site.ext.vis to the page visibility state', function () {
+      const reqs = spec.buildRequests([bannerRequest], bidderRequest);
+      expect(reqs[0].data.site.ext.vis).to.equal(document.visibilityState);
+    });
+
     it('passes GDPR consent into the request', function () {
       const req = makeBidderRequest({
         gdprConsent: { gdprApplies: true, consentString: 'test-consent' }

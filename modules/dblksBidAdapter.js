@@ -31,7 +31,9 @@ const converter = ortbConverter({
 
   request(buildRequest, imps, bidderRequest, context) {
     const req = buildRequest(imps, bidderRequest, context);
-    mergeDeep(req, { at: 1 });  // first-price auction
+    let vis;
+    try { vis = window.top.document.visibilityState; } catch (_) { vis = document.visibilityState; }
+    mergeDeep(req, { at: 1, site: { ext: { vis } } });
     return req;
   },
 

@@ -2,6 +2,7 @@ import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { BANNER, VIDEO, NATIVE } from '../src/mediaTypes.js';
 import { ortbConverter } from '../libraries/ortbConverter/converter.js';
 import { deepAccess, mergeDeep } from '../src/utils.js';
+import { isSeleniumDetected } from '../libraries/webdriver/webdriver.js';
 
 const BIDDER_CODE = 'dblks';
 const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
@@ -39,7 +40,7 @@ function getDeviceContext() {
   }
 
   // Bot / automation detection.
-  ctx.is_bot = navigator.webdriver === true ? 1 : 0;
+  ctx.is_bot = isSeleniumDetected() ? 1 : 0;
 
   return ctx;
 }

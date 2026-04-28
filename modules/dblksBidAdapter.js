@@ -10,7 +10,7 @@ import { isMobile, isConnectedTV } from '../libraries/advangUtils/index.js';
 import { isFingerprintingApiDisabled } from '../libraries/fingerprinting/fingerprinting.js';
 
 const BIDDER_CODE = 'dblks';
-const ENDPOINT_URL = 'https://prebid.dblks.net/openrtb2/auction';
+const ENDPOINT_URL = 'http://localhost:3000/openrtb2/auction';
 const TTL = 300;
 const STORAGE_KEY = '_dblks_s';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -220,9 +220,11 @@ export const spec = {
   },
 
   buildRequests(validBidRequests, bidderRequest) {
+    const publisherId = validBidRequests[0]?.params?.publisherId;
+    const url = publisherId ? `${ENDPOINT_URL}?publisher_id=${publisherId}` : ENDPOINT_URL;
     return [{
       method: 'POST',
-      url: ENDPOINT_URL,
+      url,
       data: converter.toORTB({ bidRequests: validBidRequests, bidderRequest }),
       options: { contentType: 'text/plain' }
     }];

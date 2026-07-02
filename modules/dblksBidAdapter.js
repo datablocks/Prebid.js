@@ -227,7 +227,10 @@ export const spec = {
 
   buildRequests(validBidRequests, bidderRequest) {
     const publisherId = validBidRequests[0]?.params?.publisherId;
-    const url = publisherId ? `${ENDPOINT_URL}?publisher_id=${publisherId}` : ENDPOINT_URL;
+    // '$prebid.version$' is substituted with the real version at build time.
+    const url = `${ENDPOINT_URL}?` +
+      (publisherId ? `publisher_id=${publisherId}&` : '') +
+      'pbv=$prebid.version$';
     return [{
       method: 'POST',
       url,
@@ -238,7 +241,7 @@ export const spec = {
 
   interpretResponse(serverResponse, request) {
     if (!serverResponse.body) return [];
-    return converter.fromORTB({ request: request.data, response: serverResponse.body });
+    return converter.fromORTB({ request: request.data, response: serverResponse.body }).bids;
   },
 
   getUserSyncs(syncOptions, serverResponses, gdprConsent, uspConsent, gppConsent) {

@@ -7,15 +7,16 @@ import 'modules/priceFloors.js';
 import 'modules/consentManagementTcf.js';
 import 'modules/consentManagementUsp.js';
 import { hook } from '../../../src/hook.js';
+import { addFPDToBidderRequest } from '../../helpers/fpd.js';
 
-const ENDPOINT = 'https://prebid.dblks.net/openrtb2/auction';
+const ENDPOINT = 'http://localhost:3000/openrtb2/auction?pbv=$prebid.version$';
 
 function makeBannerBid(overrides = {}) {
   return {
-    bidder:        'dblks',
-    bidId:         'bid-banner-1',
-    adUnitCode:    'banner-div',
-    auctionId:     'auction-1',
+    bidder: 'dblks',
+    bidId: 'bid-banner-1',
+    adUnitCode: 'banner-div',
+    auctionId: 'auction-1',
     transactionId: 'txn-1',
     mediaTypes: {
       banner: { sizes: [[300, 250], [728, 90]] }
@@ -27,20 +28,20 @@ function makeBannerBid(overrides = {}) {
 
 function makeVideoBid(overrides = {}) {
   return {
-    bidder:        'dblks',
-    bidId:         'bid-video-1',
-    adUnitCode:    'video-div',
-    auctionId:     'auction-1',
+    bidder: 'dblks',
+    bidId: 'bid-video-1',
+    adUnitCode: 'video-div',
+    auctionId: 'auction-1',
     transactionId: 'txn-2',
     mediaTypes: {
       video: {
-        context:     'instream',
-        playerSize:  [640, 480],
-        mimes:       ['video/mp4'],
-        protocols:   [2, 3],
+        context: 'instream',
+        playerSize: [640, 480],
+        mimes: ['video/mp4'],
+        protocols: [2, 3],
         minduration: 5,
         maxduration: 30,
-        linearity:   1
+        linearity: 1
       }
     },
     params: {},
@@ -50,16 +51,25 @@ function makeVideoBid(overrides = {}) {
 
 function makeNativeBid(overrides = {}) {
   return {
-    bidder:        'dblks',
-    bidId:         'bid-native-1',
-    adUnitCode:    'native-div',
-    auctionId:     'auction-1',
+    bidder: 'dblks',
+    bidId: 'bid-native-1',
+    adUnitCode: 'native-div',
+    auctionId: 'auction-1',
     transactionId: 'txn-3',
     mediaTypes: {
       native: {
         title: { required: true, len: 80 },
         image: { required: true }
       }
+    },
+    // Prebid core derives this from mediaTypes.native before adapters run;
+    // buildRequests reads it, so the fixture must carry it too.
+    nativeOrtbRequest: {
+      ver: '1.2',
+      assets: [
+        { id: 0, required: 1, title: { len: 80 } },
+        { id: 1, required: 1, img: { type: 3 } }
+      ]
     },
     params: {},
     ...overrides
@@ -68,12 +78,12 @@ function makeNativeBid(overrides = {}) {
 
 function makeBidderRequest(overrides = {}) {
   return {
-    bidderCode:      'dblks',
-    auctionId:       'auction-1',
+    bidderCode: 'dblks',
+    auctionId: 'auction-1',
     bidderRequestId: 'request-1',
-    timeout:         3000,
+    timeout: 3000,
     refererInfo: {
-      page:   'https://example.com/article',
+      page: 'https://example.com/article',
       domain: 'example.com'
     },
     ...overrides
@@ -134,7 +144,7 @@ describe('dblks Bid Adapter', function () {
 
     beforeEach(function () {
       bannerRequest = makeBannerBid();
-      videoRequest  = makeVideoBid();
+      videoRequest = makeVideoBid();
       nativeRequest = makeNativeBid();
       bidderRequest = makeBidderRequest();
     });
@@ -144,6 +154,14 @@ describe('dblks Bid Adapter', function () {
       expect(reqs).to.have.length(1);
       expect(reqs[0].method).to.equal('POST');
       expect(reqs[0].url).to.equal(ENDPOINT);
+    });
+
+    it('prepends publisher_id to the endpoint query when params.publisherId is set', function () {
+      const bid = makeBannerBid({ params: { publisherId: 1001 } });
+      const reqs = spec.buildRequests([bid], bidderRequest);
+      expect(reqs[0].url).to.equal(
+        'http://localhost:3000/openrtb2/auction?publisher_id=1001&pbv=$prebid.version$'
+      );
     });
 
     it('uses text/plain content type to avoid preflight', function () {
@@ -189,15 +207,19 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.imp[0].banner).to.exist;
     });
 
-    it('includes a video imp', function () {
-      const reqs = spec.buildRequests([videoRequest], bidderRequest);
-      expect(reqs[0].data.imp[0].video).to.exist;
-    });
+    if (FEATURES.VIDEO) {
+      it('includes a video imp', function () {
+        const reqs = spec.buildRequests([videoRequest], bidderRequest);
+        expect(reqs[0].data.imp[0].video).to.exist;
+      });
+    }
 
-    it('includes a native imp', function () {
-      const reqs = spec.buildRequests([nativeRequest], bidderRequest);
-      expect(reqs[0].data.imp[0].native).to.exist;
-    });
+    if (FEATURES.NATIVE) {
+      it('includes a native imp', function () {
+        const reqs = spec.buildRequests([nativeRequest], bidderRequest);
+        expect(reqs[0].data.imp[0].native).to.exist;
+      });
+    }
 
     it('batches multiple imps into one request', function () {
       const reqs = spec.buildRequests([bannerRequest, videoRequest, nativeRequest], bidderRequest);
@@ -225,10 +247,12 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.device.connectiontype).to.be.a('number');
     });
 
-    it('passes GDPR consent into the request', function () {
-      const req = makeBidderRequest({
+    it('passes GDPR consent into the request', async function () {
+      // Consent reaches the ORTB request via the bidderRequest's ortb2
+      // fragment, which core builds before adapters run — replicate that.
+      const req = await addFPDToBidderRequest(makeBidderRequest({
         gdprConsent: { gdprApplies: true, consentString: 'test-consent' }
-      });
+      }));
       const reqs = spec.buildRequests([bannerRequest], req);
       const ortb = reqs[0].data;
       expect(ortb.regs?.ext?.gdpr ?? ortb.regs?.gdpr).to.equal(1);
@@ -239,7 +263,7 @@ describe('dblks Bid Adapter', function () {
     function makeServerResponse(bid) {
       return {
         body: {
-          id:      'resp-1',
+          id: 'resp-1',
           seatbid: [{ seat: 'dblks', bid: [bid] }]
         }
       };
@@ -254,15 +278,15 @@ describe('dblks Bid Adapter', function () {
       const reqs = spec.buildRequests([makeBannerBid()], makeBidderRequest());
       const impId = reqs[0].data.imp[0].id;
       const bids = spec.interpretResponse(makeServerResponse({
-        id:      'bid-1',
-        impid:   impId,
-        price:   1.50,
-        crid:    'creative-1',
-        adm:     '<div>ad</div>',
+        id: 'bid-1',
+        impid: impId,
+        price: 1.50,
+        crid: 'creative-1',
+        adm: '<div>ad</div>',
         adomain: ['advertiser.com'],
-        w:       300,
-        h:       250,
-        mtype:   1
+        w: 300,
+        h: 250,
+        mtype: 1
       }), reqs[0]);
       expect(bids).to.have.length(1);
       expect(bids[0].cpm).to.equal(1.50);
@@ -272,37 +296,39 @@ describe('dblks Bid Adapter', function () {
       expect(bids[0].meta.advertiserDomains).to.deep.equal(['advertiser.com']);
     });
 
-    it('returns a video bid response', function () {
-      const reqs = spec.buildRequests([makeVideoBid()], makeBidderRequest());
-      const impId = reqs[0].data.imp[0].id;
-      const bids = spec.interpretResponse(makeServerResponse({
-        id:    'bid-v1',
-        impid: impId,
-        price: 3.00,
-        crid:  'video-creative-1',
-        adm:   '<VAST version="4.0"></VAST>',
-        w:     640,
-        h:     480,
-        mtype: 2
-      }), reqs[0]);
-      expect(bids).to.have.length(1);
-      expect(bids[0].cpm).to.equal(3.00);
-      expect(bids[0].mediaType).to.equal(VIDEO);
-    });
+    if (FEATURES.VIDEO) {
+      it('returns a video bid response', function () {
+        const reqs = spec.buildRequests([makeVideoBid()], makeBidderRequest());
+        const impId = reqs[0].data.imp[0].id;
+        const bids = spec.interpretResponse(makeServerResponse({
+          id: 'bid-v1',
+          impid: impId,
+          price: 3.00,
+          crid: 'video-creative-1',
+          adm: '<VAST version="4.0"></VAST>',
+          w: 640,
+          h: 480,
+          mtype: 2
+        }), reqs[0]);
+        expect(bids).to.have.length(1);
+        expect(bids[0].cpm).to.equal(3.00);
+        expect(bids[0].mediaType).to.equal(VIDEO);
+      });
+    }
 
     it('populates meta.advertiserDomains from adomain', function () {
       const reqs = spec.buildRequests([makeBannerBid()], makeBidderRequest());
       const impId = reqs[0].data.imp[0].id;
       const bids = spec.interpretResponse(makeServerResponse({
-        id:      'bid-2',
-        impid:   impId,
-        price:   2.00,
-        crid:    'cr-2',
-        adm:     '<div>ad</div>',
+        id: 'bid-2',
+        impid: impId,
+        price: 2.00,
+        crid: 'cr-2',
+        adm: '<div>ad</div>',
         adomain: ['brand.com', 'agency.com'],
-        w:       728,
-        h:       90,
-        mtype:   1
+        w: 728,
+        h: 90,
+        mtype: 1
       }), reqs[0]);
       expect(bids[0].meta.advertiserDomains).to.deep.equal(['brand.com', 'agency.com']);
     });

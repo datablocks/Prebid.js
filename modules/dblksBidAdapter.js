@@ -150,6 +150,12 @@ const converter = ortbConverter({
 
     mergeDeep(req, {
       at: 1,
+      ext: {
+        prebid: {
+          // '$prebid.version$' is substituted with the real version at build time.
+          ver: '$prebid.version$',
+        }
+      },
       site: {
         ext: {
           vis: page.vis,

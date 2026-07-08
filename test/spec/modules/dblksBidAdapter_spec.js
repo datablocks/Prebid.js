@@ -7,6 +7,7 @@ import 'modules/priceFloors.js';
 import 'modules/consentManagementTcf.js';
 import 'modules/consentManagementUsp.js';
 import { hook } from '../../../src/hook.js';
+import * as adUnits from 'src/utils/adUnits';
 import { addFPDToBidderRequest } from '../../helpers/fpd.js';
 
 const ENDPOINT = 'http://localhost:3000/openrtb2/auction?pbv=$prebid.version$';
@@ -174,9 +175,9 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.at).to.equal(1);
     });
 
-    it('sets ext.prebid.ver to the Prebid.js version', function () {
+    it('sets ext.dblks.ver to the Prebid.js version', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      expect(reqs[0].data.ext.prebid.ver).to.equal('$prebid.version$');
+      expect(reqs[0].data.ext.dblks.ver).to.equal('$prebid.version$');
     });
 
     it('always sets tagid to adUnitCode', function () {
@@ -227,19 +228,19 @@ describe('dblks Bid Adapter', function () {
       expect(reqs[0].data.imp).to.have.length(3);
     });
 
-    it('sets site.ext.vis to the page visibility state', function () {
+    it('sets site.ext.dblks.vis to the page visibility state', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      expect(reqs[0].data.site.ext.vis).to.equal(document.visibilityState);
+      expect(reqs[0].data.site.ext.dblks.vis).to.equal(document.visibilityState);
     });
 
-    it('sets site.ext.scroll to the page scroll offset', function () {
+    it('sets site.ext.dblks.scroll to the page scroll offset', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      expect(reqs[0].data.site.ext.scroll).to.be.a('number');
+      expect(reqs[0].data.site.ext.dblks.scroll).to.be.a('number');
     });
 
-    it('sets device.ext.is_bot', function () {
+    it('sets device.ext.dblks.is_bot', function () {
       const reqs = spec.buildRequests([bannerRequest], bidderRequest);
-      expect(reqs[0].data.device.ext.is_bot).to.be.oneOf([0, 1]);
+      expect(reqs[0].data.device.ext.dblks.is_bot).to.be.oneOf([0, 1]);
     });
 
     it('sets device.connectiontype', function () {
@@ -256,6 +257,110 @@ describe('dblks Bid Adapter', function () {
       const reqs = spec.buildRequests([bannerRequest], req);
       const ortb = reqs[0].data;
       expect(ortb.regs?.ext?.gdpr ?? ortb.regs?.gdpr).to.equal(1);
+    });
+  });
+
+  describe('ad unit coordinates (imp.ext.dblks.coords)', function () {
+    let sandbox;
+
+    beforeEach(function () {
+      sandbox = sinon.createSandbox();
+    });
+
+    afterEach(function () {
+      sandbox.restore();
+    });
+
+    // Fresh objects per test: the boundingClientRect library caches rects
+    // per element in a Map that only clears on real auctions.
+    function makeTopWindow(scrollX = 0, scrollY = 0) {
+      const win = { pageXOffset: scrollX, pageYOffset: scrollY, frameElement: null };
+      win.parent = win;
+      win.top = win;
+      return win;
+    }
+
+    function makeElement(rect, win) {
+      return {
+        ownerDocument: { defaultView: win },
+        getBoundingClientRect: () => rect,
+      };
+    }
+
+    function firstImp() {
+      const reqs = spec.buildRequests([makeBannerBid()], makeBidderRequest());
+      return reqs[0].data.imp[0];
+    }
+
+    it('reports page-absolute coords with frame top for an element on the top page', function () {
+      const win = makeTopWindow(5, 100);
+      const el = makeElement({ top: 50.4, left: 29.6, width: 300, height: 250 }, win);
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(el);
+
+      const coords = firstImp().ext.dblks.coords;
+      expect(coords).to.deep.equal({
+        top: 150,   // Math.round(50.4 + 100)
+        left: 35,   // Math.round(29.6 + 5)
+        width: 300,
+        height: 250,
+        frame: 'top',
+      });
+    });
+
+    it('adds the containing iframe rect and parent scroll for a friendly iframe', function () {
+      const topWin = makeTopWindow(10, 200);
+      const frameEl = { getBoundingClientRect: () => ({ top: 400, left: 40, width: 320, height: 260 }) };
+      const childWin = { pageXOffset: 0, pageYOffset: 0, frameElement: frameEl, parent: topWin, top: topWin };
+      const el = makeElement({ top: 5, left: 10, width: 300, height: 250 }, childWin);
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(el);
+
+      const coords = firstImp().ext.dblks.coords;
+      expect(coords).to.deep.equal({
+        top: 605,  // 5 + 0 (child scroll) + 400 (frame rect) + 200 (top scroll)
+        left: 60,  // 10 + 0 + 40 + 10
+        width: 300,
+        height: 250,
+        frame: 'top',
+      });
+    });
+
+    it('falls back to frame iframe without throwing when the frame walk hits a cross-origin boundary', function () {
+      const childWin = { pageXOffset: 3, pageYOffset: 7 };
+      Object.defineProperty(childWin, 'frameElement', {
+        get() { throw new Error('cross-origin'); },
+      });
+      const el = makeElement({ top: 20, left: 30, width: 300, height: 250 }, childWin);
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(el);
+
+      const coords = firstImp().ext.dblks.coords;
+      expect(coords).to.deep.equal({
+        top: 27,   // rect + the deepest frame's own scroll, nothing more
+        left: 33,
+        width: 300,
+        height: 250,
+        frame: 'iframe',
+      });
+    });
+
+    it('reports frame iframe when frameElement is null but the window is not top (silent cross-origin)', function () {
+      const otherTop = makeTopWindow();
+      const childWin = { pageXOffset: 0, pageYOffset: 0, frameElement: null, top: otherTop };
+      childWin.parent = childWin;
+      const el = makeElement({ top: 8, left: 9, width: 100, height: 50 }, childWin);
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(el);
+
+      expect(firstImp().ext.dblks.coords.frame).to.equal('iframe');
+    });
+
+    it('omits coords entirely when the element cannot be found', function () {
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(null);
+      expect(firstImp().ext).to.not.have.property('dblks');
+    });
+
+    it('omits coords entirely for an unrendered element (all-zero rect)', function () {
+      const el = makeElement({ top: 0, left: 0, width: 0, height: 0 }, makeTopWindow());
+      sandbox.stub(adUnits, 'getAdUnitElement').returns(el);
+      expect(firstImp().ext).to.not.have.property('dblks');
     });
   });
 

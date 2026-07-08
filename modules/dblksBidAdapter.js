@@ -8,9 +8,14 @@ import { getDevicePixelRatio } from '../libraries/devicePixelRatio/devicePixelRa
 import { getTimeZone } from '../libraries/timezone/timezone.js';
 import { isMobile, isConnectedTV } from '../libraries/advangUtils/index.js';
 import { isFingerprintingApiDisabled } from '../libraries/fingerprinting/fingerprinting.js';
+import { getAdUnitElement } from '../src/utils/adUnits.js';
+import { getBoundingClientRect } from '../libraries/boundingClientRect/boundingClientRect.js';
 
 const BIDDER_CODE = 'dblks';
-const ENDPOINT_URL = 'http://localhost:3000/openrtb2/auction';
+// Page-level override for dev/tunnel testing: set window.DBLKS_ENDPOINT
+// before Prebid loads to point the adapter at a non-localhost bidder.
+const ENDPOINT_URL = (typeof window !== 'undefined' && window.DBLKS_ENDPOINT) ||
+  'http://localhost:3000/openrtb2/auction';
 const TTL = 300;
 const STORAGE_KEY = '_dblks_s';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -120,6 +125,61 @@ function getDeviceContext() {
 
 // ─── ortbConverter ────────────────────────────────────────────────────────────
 
+// Bounding box of the ad unit's DOM element, measured once per bid request
+// during buildRequests (getBoundingClientRect is the per-auction cached
+// wrapper). Coordinates start viewport-relative in the element's own window
+// and are converted to page-absolute by walking window.frameElement upward
+// through friendly iframes, adding each containing iframe's rect plus the
+// parent window's scroll offsets. `frame` reports the reference frame:
+// 'top' when the walk reached the real top window (page-absolute), 'iframe'
+// when a cross-origin boundary stopped it (relative to the deepest
+// measurable frame). Returns null — omit from the payload — when the
+// element is missing or unrendered (all-zero rect).
+function getAdUnitCoords(bidRequest) {
+  try {
+    const element = getAdUnitElement(bidRequest);
+    if (!element) {
+      return null;
+    }
+    const rect = getBoundingClientRect(element);
+    if (!rect || (rect.top === 0 && rect.left === 0 && rect.width === 0 && rect.height === 0)) {
+      return null;
+    }
+    let win = element.ownerDocument.defaultView;
+    let top = rect.top + win.pageYOffset;
+    let left = rect.left + win.pageXOffset;
+    let frame = 'iframe';
+    try {
+      let frameElement = win.frameElement;
+      while (frameElement != null) {
+        const frameRect = getBoundingClientRect(frameElement);
+        win = win.parent;
+        top += frameRect.top + win.pageYOffset;
+        left += frameRect.left + win.pageXOffset;
+        frameElement = win.frameElement;
+      }
+      // frameElement is null both at the real top AND inside a cross-origin
+      // iframe; only the former makes the coordinates page-absolute.
+      if (win === win.top) {
+        frame = 'top';
+      }
+    } catch (e) {
+      // Cross-origin access threw mid-walk: keep what was accumulated,
+      // relative to the deepest frame reached.
+      frame = 'iframe';
+    }
+    return {
+      top: Math.round(top),
+      left: Math.round(left),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      frame,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 const converter = ortbConverter({
   context: {
     netRevenue: true,
@@ -139,6 +199,11 @@ const converter = ortbConverter({
       imp.ext = imp.ext || {};
       imp.ext.gpid = deepAccess(bidRequest, 'ortb2Imp.ext.data.pbadslot') || bidRequest.adUnitCode;
     }
+    const coords = getAdUnitCoords(bidRequest);
+    if (coords) {
+      imp.ext = imp.ext || {};
+      imp.ext.dblks = { coords };
+    }
     return imp;
   },
 
@@ -148,27 +213,33 @@ const converter = ortbConverter({
     const device = getDeviceContext();
     const session = getSessionData();
 
+    // Everything dblks-specific rides under a "dblks" key on the relevant
+    // ext object, so the server can consume and strip it wholesale before
+    // fanning out to exchanges. Spec-level fields (devicetype, langb,
+    // numeric pxratio, connectiontype) stay at their OpenRTB positions.
     mergeDeep(req, {
       at: 1,
       ext: {
-        prebid: {
+        dblks: {
           // '$prebid.version$' is substituted with the real version at build time.
           ver: '$prebid.version$',
         }
       },
       site: {
         ext: {
-          vis: page.vis,
-          scroll: page.scroll,
-          ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }),
-          ...(session.sid && {
-            uid: session.uid,
-            sid: session.sid,
-            pct: session.pct,
-            sage: session.sage,
-            ...(session.tbp != null && { tbp: session.tbp }),
-            ...(session.purl && { purl: session.purl }),
-          }),
+          dblks: {
+            vis: page.vis,
+            scroll: page.scroll,
+            ...(page.plt != null && { plt: page.plt, ct: page.ct, rt: page.rt }),
+            ...(session.sid && {
+              uid: session.uid,
+              sid: session.sid,
+              pct: session.pct,
+              sage: session.sage,
+              ...(session.tbp != null && { tbp: session.tbp }),
+              ...(session.purl && { purl: session.purl }),
+            }),
+          }
         }
       },
       device: {
@@ -177,14 +248,16 @@ const converter = ortbConverter({
         ...(typeof device.pxratio === 'number' && { pxratio: device.pxratio }),
         ...(device.connectiontype != null && { connectiontype: device.connectiontype }),
         ext: {
-          is_bot: device.is_bot,
-          cookies: device.cookies,
-          ...(typeof device.pxratio === 'string' && { pxratio: device.pxratio }),
-          ...(device.mtp != null && { mtp: device.mtp }),
-          ...(device.tz != null && { tz: device.tz }),
-          ...(device.downlink != null && { downlink: device.downlink }),
-          ...(device.cpu && { cpu: device.cpu }),
-          ...(device.ram && { ram: device.ram }),
+          dblks: {
+            is_bot: device.is_bot,
+            cookies: device.cookies,
+            ...(typeof device.pxratio === 'string' && { pxratio: device.pxratio }),
+            ...(device.mtp != null && { mtp: device.mtp }),
+            ...(device.tz != null && { tz: device.tz }),
+            ...(device.downlink != null && { downlink: device.downlink }),
+            ...(device.cpu && { cpu: device.cpu }),
+            ...(device.ram && { ram: device.ram }),
+          }
         },
       },
     });
@@ -209,6 +282,7 @@ const converter = ortbConverter({
 
 export const spec = {
   code: BIDDER_CODE,
+  aliases: ['dblks2'],
   supportedMediaTypes: [BANNER, VIDEO, NATIVE],
 
   isBidRequestValid(bid) {

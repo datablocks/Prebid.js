@@ -446,15 +446,34 @@ describe('dblks Bid Adapter', function () {
       expect(spec.getUserSyncs({}, [], null, null, null)).to.deep.equal([]);
     });
 
-    it('returns image pixel when pixelEnabled', function () {
+    it('returns image pixel when pixelEnabled, with explicit type=', function () {
       const syncs = spec.getUserSyncs({ pixelEnabled: true }, []);
       expect(syncs[0].type).to.equal('image');
       expect(syncs[0].url).to.include(SYNC_URL);
+      expect(syncs[0].url).to.include('type=image');
     });
 
-    it('returns iframe when iframeEnabled', function () {
-      const syncs = spec.getUserSyncs({ iframeEnabled: true }, []);
+    it('returns iframe when iframeEnabled, preferred over image', function () {
+      const syncs = spec.getUserSyncs({ iframeEnabled: true, pixelEnabled: true }, []);
       expect(syncs[0].type).to.equal('iframe');
+      expect(syncs[0].url).to.include('type=iframe');
+    });
+
+    it('omits gdpr= when the CMP never determined applicability', function () {
+      const syncs = spec.getUserSyncs(
+        { pixelEnabled: true }, [],
+        { consentString: 'abc123' } // no gdprApplies boolean
+      );
+      expect(syncs[0].url).to.not.include('gdpr=');
+      expect(syncs[0].url).to.include('gdpr_consent=abc123');
+    });
+
+    it('sends gdpr=0 when the CMP determined non-applicability', function () {
+      const syncs = spec.getUserSyncs(
+        { pixelEnabled: true }, [],
+        { gdprApplies: false, consentString: '' }
+      );
+      expect(syncs[0].url).to.include('gdpr=0');
     });
 
     it('appends GDPR params', function () {

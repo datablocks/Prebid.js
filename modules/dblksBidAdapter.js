@@ -16,6 +16,10 @@ const BIDDER_CODE = 'dblks';
 // before Prebid loads to point the adapter at a non-localhost bidder.
 const ENDPOINT_URL = (typeof window !== 'undefined' && window.DBLKS_ENDPOINT) ||
   'http://localhost:3000/openrtb2/auction';
+// Same override pattern for the user-sync orchestrator (dev tunnels mint a
+// new hostname per session; production is the sync service's public host).
+const SYNC_URL = (typeof window !== 'undefined' && window.DBLKS_SYNC_ENDPOINT) ||
+  'https://sync.dblks.net/usersync';
 const TTL = 300;
 const STORAGE_KEY = '_dblks_s';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -322,10 +326,16 @@ export const spec = {
     if (!syncOptions.pixelEnabled && !syncOptions.iframeEnabled) return [];
 
     const type = syncOptions.iframeEnabled ? 'iframe' : 'image';
-    const params = [];
+    // type= is explicit: the orchestrator prefers it over Sec-Fetch-Dest
+    // sniffing, and an <img> that receives the iframe HTML fires nothing.
+    const params = [`type=${type}`];
 
     if (gdprConsent) {
-      params.push(`gdpr=${gdprConsent.gdprApplies ? 1 : 0}`);
+      // Only claim applicability the CMP actually determined — absent means
+      // "no CMP signal" to the sync service, while gdpr=0 asserts non-EU.
+      if (typeof gdprConsent.gdprApplies === 'boolean') {
+        params.push(`gdpr=${Number(gdprConsent.gdprApplies)}`);
+      }
       params.push(`gdpr_consent=${encodeURIComponent(gdprConsent.consentString ?? '')}`);
     }
     if (uspConsent) {
@@ -336,8 +346,7 @@ export const spec = {
       params.push(`gpp_sid=${gppConsent.applicableSections.join(',')}`);
     }
 
-    const qs = params.length ? `?${params.join('&')}` : '';
-    return [{ type, url: `https://sync.dblks.net/usersync${qs}` }];
+    return [{ type, url: `${SYNC_URL}?${params.join('&')}` }];
   }
 };
 
